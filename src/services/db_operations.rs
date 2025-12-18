@@ -340,7 +340,7 @@ impl DbOperations {
         VALUES ($1, $2, $3)
         RETURNING id
         "#
-    )       
+    )
             .bind(business_id)
             .bind(new_account.name)
             .bind(new_account.currency)
@@ -350,6 +350,52 @@ impl DbOperations {
         Ok(row.get("id"))
     }
 
+    pub async fn verify_business_api_key(
+        &self,
+        key_hash: &str,
+    ) -> Result<i64, sqlx::Error> {
+
+        let rec = sqlx::query(
+        r#"
+        SELECT business_id
+        FROM api_keys
+        WHERE key_hash = $1
+          AND status = 'active'
+          AND (expires_at IS NULL OR expires_at > now())
+        "#
+        
+    )       .bind(key_hash)
+            .fetch_optional(&self.connector)
+            .await?;
+
+        match rec {
+            Some(r) => Ok(r.get("business_id")),
+            None => Err(sqlx::Error::RowNotFound),
+        }
+    }
+
+
+    pub async fn verify_admin_api_key(
+        &self,
+        key_hash: &str,
+    ) -> Result<i64, sqlx::Error> {
+
+        let rec = sqlx::query(
+        r#"
+        SELECT admin_id
+        FROM admin_api_keys
+        WHERE key_hash = $1
+          AND status = 'active'
+        "#
+    )       .bind(key_hash)
+            .fetch_optional(&self.connector)
+            .await?;
+
+        match rec {
+            Some(r) => Ok(r.get("admin_id")),
+            None => Err(sqlx::Error::RowNotFound),
+        }
+    }
 
 
 }

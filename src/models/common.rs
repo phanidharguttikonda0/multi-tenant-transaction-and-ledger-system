@@ -26,6 +26,7 @@ impl<T> ApiResponse<T> {
 }
 
 
+#[derive(Clone)]
 pub struct AccountId {
     pub account_id: i64
 }

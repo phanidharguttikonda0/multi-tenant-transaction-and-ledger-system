@@ -32,3 +32,19 @@ pub fn generate_api_key() -> (String, String) {
 
     (raw_key, hashed_key)
 }
+
+pub fn hash_api_key(raw_key: &str) -> String {
+    use hmac::{Hmac, Mac};
+    use sha2::Sha256;
+
+    type HmacSha256 = Hmac<Sha256>;
+
+    let secret = std::env::var("API_KEY_SECRET")
+        .expect("API_KEY_SECRET must be set");
+
+    let mut mac =
+        HmacSha256::new_from_slice(secret.as_bytes()).unwrap();
+    mac.update(raw_key.as_bytes());
+
+    hex::encode(mac.finalize().into_bytes())
+}
