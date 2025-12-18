@@ -1,3 +1,5 @@
+extern crate core;
+
 mod routes;
 mod middlewares;
 mod models;

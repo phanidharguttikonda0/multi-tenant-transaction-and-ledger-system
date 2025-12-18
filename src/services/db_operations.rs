@@ -1,5 +1,7 @@
+use rust_decimal::Decimal;
 use sqlx::{Pool, Postgres, Row, Transaction};
 use sqlx::postgres::PgPoolOptions;
+use crate::models::accounts_models::{Account, NewAccount};
 use crate::models::bussiness_models::BusinessState;
 
 pub struct DbOperations {
@@ -238,4 +240,116 @@ impl DbOperations {
             .await?;
         Ok(())
     }
+
+
+    pub async fn get_accounts_by_business(
+        &self,
+        business_id: i64,
+    ) -> Result<Vec<Account>, sqlx::Error> {
+
+        let rows = sqlx::query(
+        r#"
+        SELECT id, name, currency, status::TEXT, balance, created_at
+        FROM business_accounts
+        WHERE business_id = $1
+        ORDER BY created_at DESC
+        "#
+    )
+            .bind(business_id)
+            .fetch_all(&self.connector)
+            .await?;
+
+        Ok(rows.into_iter().map(|r| Account {
+            id: r.get("id"),
+            name: r.get("name"),
+            currency: r.get("currency"),
+            status: r.get("status"),
+            balance: r.get("balance"),
+            created_at: r.get("created_at"),
+        }).collect())
+    }
+
+
+    pub async fn validate_account_ownership(
+        &self,
+        business_id: i64,
+        account_id: i64,
+    ) -> Result<bool, sqlx::Error> {
+
+        let res = sqlx::query(
+        "SELECT 1 FROM business_accounts WHERE id = $1 AND business_id = $2"
+    )
+            .bind(account_id)
+            .bind(business_id)
+            .fetch_optional(&self.connector)
+            .await?;
+
+        Ok(res.is_some())
+    }
+
+    pub async fn get_account_balance(
+        &self,
+        account_id: i64,
+    ) -> Result<Decimal, sqlx::Error> {
+
+        let row = sqlx::query(
+        "SELECT balance FROM business_accounts WHERE id = $1"
+    )
+            .bind(account_id)
+            .fetch_one(&self.connector)
+            .await?;
+
+        Ok(row.get("balance"))
+    }
+
+    pub async fn get_account_details(
+        &self,
+        account_id: i64,
+    ) -> Result<Account, sqlx::Error> {
+
+        let r = sqlx::query(
+        r#"
+        SELECT id, name, currency, status::TEXT, balance, created_at
+        FROM business_accounts
+        WHERE id = $1
+        "#
+    )       .bind(account_id)
+            .fetch_one(&self.connector)
+            .await?;
+
+        Ok(Account {
+            id: r.get("id"),
+            name: r.get("name"),
+            currency: r.get("currency"),
+            status: r.get("status"),
+            balance: r.get("balance"),
+            created_at: r.get("created_at"),
+        })
+    }
+
+
+    pub async fn create_account(
+        &self,
+        business_id: i64,
+        new_account: NewAccount,
+    ) -> Result<i64, sqlx::Error> {
+
+        let row = sqlx::query(
+        r#"
+        INSERT INTO business_accounts (business_id, name, currency)
+        VALUES ($1, $2, $3)
+        RETURNING id
+        "#
+    )       
+            .bind(business_id)
+            .bind(new_account.name)
+            .bind(new_account.currency)
+            .fetch_one(&self.connector)
+            .await?;
+
+        Ok(row.get("id"))
+    }
+
+
+
 }

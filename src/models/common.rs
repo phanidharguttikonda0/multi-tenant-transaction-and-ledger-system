@@ -24,3 +24,8 @@ impl<T> ApiResponse<T> {
         }
     }
 }
+
+
+pub struct AccountId {
+    pub account_id: i64
+}
