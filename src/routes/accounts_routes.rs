@@ -1,7 +1,9 @@
+use std::sync::Arc;
 use axum::Router;
 use axum::routing::{get, post};
+use crate::AppState;
 
-pub async fn accounts_routes() -> Router {
+pub async fn accounts_routes() -> Router<Arc<AppState>> {
     Router::new()
         .route("/", get(|| async {
             tracing::info!("Get all accounts of a business") ;

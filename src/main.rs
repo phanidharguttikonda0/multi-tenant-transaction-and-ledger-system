@@ -2,7 +2,9 @@ mod routes;
 mod middlewares;
 mod models;
 mod services;
+mod controllers;
 
+use std::sync::Arc;
 use axum::Router;
 use axum::routing::get;
 use tracing_appender::non_blocking;
@@ -11,6 +13,11 @@ use crate::routes::accounts_routes::accounts_routes;
 use crate::routes::admin_routes::admin_routes;
 use crate::routes::transaction_routes::transaction_routes;
 use crate::routes::webhooks_routes::webhook_routes;
+use crate::services::db_operations::DbOperations;
+
+pub struct AppState {
+   pub database_connector: DbOperations
+}
 
 #[tokio::main]
 async fn main() {
@@ -29,6 +36,8 @@ async fn main() {
 
 
 async fn top_level_routes() -> Router {
+    let database_connector = DbOperations::new().await ;
+    let state = Arc::new(AppState { database_connector }) ;
     Router::new()
         .route("/health",get(|| async {
             tracing::info!("Health check") ;
@@ -46,4 +55,5 @@ async fn top_level_routes() -> Router {
         .nest("/accounts", accounts_routes().await)
         .nest("/transaction", transaction_routes().await)
         .nest("/webhooks", webhook_routes().await)
+        .with_state(state)
 }

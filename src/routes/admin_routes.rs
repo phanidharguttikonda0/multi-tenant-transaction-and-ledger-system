@@ -1,7 +1,9 @@
+use std::sync::Arc;
 use axum::Router;
 use axum::routing::{delete, get, post};
+use crate::AppState;
 
-pub async fn admin_routes() -> Router {
+pub async fn admin_routes() -> Router<Arc<AppState>> {
     Router::new()
         .route("/businesses", post(|| async {
             tracing::info!("Creates a new business");

@@ -1,7 +1,9 @@
+use std::sync::Arc;
 use axum::Router;
 use axum::routing::{delete, get, post, put};
+use crate::AppState;
 
-pub async fn webhook_routes() -> Router {
+pub async fn webhook_routes() -> Router<Arc<AppState>> {
     Router::new()
         .route("/", get(|| async {
             tracing::info!("list all registered webhooks") ;

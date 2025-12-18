@@ -1,7 +1,9 @@
+use std::sync::Arc;
 use axum::Router;
 use axum::routing::{get, post};
+use crate::AppState;
 
-pub async fn transaction_routes() -> Router {
+pub async fn transaction_routes() -> Router<Arc<AppState>> {
     Router::new()
         .route("/credit", post(|| async {
             tracing::info!("Credit money to an account") ;
