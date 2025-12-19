@@ -4,3 +4,4 @@ pub mod accounts_models;
 pub mod transaction_models;
 pub mod bussiness_models;
 pub mod common;
+pub mod webhooks_models;

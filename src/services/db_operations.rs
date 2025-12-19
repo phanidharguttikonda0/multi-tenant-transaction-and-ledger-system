@@ -1,8 +1,10 @@
 use rust_decimal::Decimal;
 use sqlx::{Pool, Postgres, Row, Transaction};
 use sqlx::postgres::PgPoolOptions;
+use crate::models;
 use crate::models::accounts_models::{Account, NewAccount};
 use crate::models::bussiness_models::BusinessState;
+use crate::models::webhooks_models::WebhookResponse;
 
 pub struct DbOperations {
     pub(crate) connector: Pool<Postgres>
@@ -340,7 +342,7 @@ impl DbOperations {
         business_id: i64,
         new_account: NewAccount,
     ) -> Result<i64, sqlx::Error> {
-        
+
         let row = sqlx::query(
         r#"
         INSERT INTO business_accounts (business_id, name, currency)
@@ -534,6 +536,105 @@ impl DbOperations {
             .await?;
 
         Ok(())
+    }
+
+
+
+    pub async fn get_webhooks_by_business(
+        &self,
+        business_id: i64,
+    ) -> Result<Vec<WebhookResponse>, sqlx::Error> {
+        let rows = sqlx::query(
+            r#"
+        SELECT id, url, business_id, status, created_at
+        FROM webhooks
+        WHERE business_id = $1
+        ORDER BY created_at DESC
+        "#
+        )
+            .bind(business_id)
+            .fetch_all(&self.connector)
+            .await?;
+
+        let webhooks = rows
+            .into_iter()
+            .map(|row| WebhookResponse {
+                id: row.get("id"),
+                url: row.get("url"),
+                business_id: row.get("business_id"),
+                status: row.get("status"),
+                created_at: row.get("created_at"),
+            })
+            .collect();
+
+        Ok(webhooks)
+    }
+
+
+    pub async fn create_webhook(
+        &self,
+        business_id: i64,
+        url: &str,
+    ) -> Result<i64, sqlx::Error> {
+        let row = sqlx::query(
+            r#"
+        INSERT INTO webhooks (business_id, url, secret, status)
+        VALUES ($1, $2, gen_random_uuid()::text, 'active')
+        RETURNING id
+        "#
+        )
+            .bind(business_id)
+            .bind(url)
+            .fetch_one(&self.connector)
+            .await?;
+
+        Ok(row.get("id"))
+    }
+
+    pub async fn disable_webhook(
+        &self,
+        business_id: i64,
+        webhook_id: i64,
+    ) -> Result<u64, sqlx::Error> {
+        let result = sqlx::query(
+            r#"
+        UPDATE webhooks
+        SET status = 'disabled'
+        WHERE id = $1 AND business_id = $2
+        "#
+        )
+            .bind(webhook_id)
+            .bind(business_id)
+            .execute(&self.connector)
+            .await?;
+
+        Ok(result.rows_affected())
+    }
+
+    pub async fn update_webhook(
+        &self,
+        business_id: i64,
+        webhook_id: i64,
+        url: Option<String>,
+        status: Option<String>,
+    ) -> Result<u64, sqlx::Error> {
+        let result = sqlx::query(
+            r#"
+        UPDATE webhooks
+        SET
+            url = COALESCE($1, url),
+            status = COALESCE($2, status)
+        WHERE id = $3 AND business_id = $4
+        "#
+        )
+            .bind(url)
+            .bind(status)
+            .bind(webhook_id)
+            .bind(business_id)
+            .execute(&self.connector)
+            .await?;
+
+        Ok(result.rows_affected())
     }
 
 }
