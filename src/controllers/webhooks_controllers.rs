@@ -6,7 +6,7 @@ use axum::response::IntoResponse;
 use crate::AppState;
 use crate::models::bussiness_models::Business;
 use crate::models::common::{AccountId, ApiResponse};
-use crate::models::webhooks_models::{CreateWebhookRequest, UpdateWebhookRequest};
+use crate::models::webhooks_models::{CreateWebhookRequest, UpdateWebhookRequest, WebhookResponse};
 
 pub async fn get_webhooks(
     State(app_state): State<Arc<AppState>>,
@@ -14,12 +14,12 @@ pub async fn get_webhooks(
 ) -> impl IntoResponse {
     tracing::info!(
         "getting webhooks for business {}",
-        business_account
+        business_account.account_id
     );
 
     match app_state
         .database_connector
-        .get_webhooks_by_business(business_account.into())
+        .get_webhooks_by_business(business_account.account_id)
         .await
     {
         Ok(webhooks) => (
@@ -30,7 +30,7 @@ pub async fn get_webhooks(
             tracing::error!("error fetching webhooks {}", e);
             (
                 StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ApiResponse::<String>::error(e.to_string())),
+                Json(ApiResponse::<Vec<WebhookResponse>>::error(e.to_string())),
             )
         }
     }
@@ -45,12 +45,12 @@ pub async fn register_webhook(
 ) -> impl IntoResponse {
     tracing::info!(
         "registering webhook for business {}",
-        business_account
+        business_account.account_id
     );
 
     match app_state
         .database_connector
-        .create_webhook(business_account.into(), &req.url)
+        .create_webhook(business_account.account_id, &req.url)
         .await
     {
         Ok(id) => (
@@ -61,7 +61,7 @@ pub async fn register_webhook(
             tracing::error!("error creating webhook {}", e);
             (
                 StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ApiResponse::<String>::error(e.to_string())),
+                Json(ApiResponse::<i64>::error(e.to_string())),
             )
         }
     }
@@ -77,12 +77,12 @@ pub async fn delete_webhook(
     tracing::info!(
         "disabling webhook {} for business {}",
         webhook_id,
-        business_account
+        business_account.account_id
     );
 
     match app_state
         .database_connector
-        .disable_webhook(business_account.into(), webhook_id)
+        .disable_webhook(business_account.account_id, webhook_id)
         .await
     {
         Ok(0) => (
@@ -113,13 +113,13 @@ pub async fn update_webhook(
     tracing::info!(
         "updating webhook {} for business {}",
         webhook_id,
-        business_account
+        business_account.account_id
     );
 
     match app_state
         .database_connector
         .update_webhook(
-            business_account.into(),
+            business_account.account_id,
             webhook_id,
             req.url,
             req.status,
