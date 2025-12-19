@@ -35,7 +35,7 @@ impl DbOperations {
         let result = sqlx::query("insert into businesses (name) values ($1) returning id")
             .bind(name)
             .fetch_one(&self.connector).await ;
-
+        tracing::info!("executed the create new bussiness query") ;
         match result {
             Ok(res) => {
                 tracing::info!("got the id after creating business") ;
@@ -52,9 +52,13 @@ impl DbOperations {
 
     pub async fn get_businesses(&self) -> Result<Vec<BusinessState>, sqlx::Error> {
         let result = sqlx::query("select id, name, status::Text, created_at from businesses ORDER BY created_at DESC").fetch_all(&self.connector).await ;
+        tracing::info!("executed query to get all businesses") ;
         match result {
             Ok(res) => Ok(res.into_iter().map(|row| BusinessState { id: row.get("id"), name: row.get("name"), status: row.get("status"), created_at: row.get("created_at") }).collect()),
-            Err(err) => Err(err)
+            Err(err) => {
+                tracing::error!("occurred while getting all businesses {}", err) ;
+                Err(err)
+            }
         }
     }
 
@@ -140,6 +144,7 @@ impl DbOperations {
     pub async fn store_api_key(&self, business_id: i64, key_hash: &str) -> Result<(), sqlx::Error> {
         let result = sqlx::query("insert into api_keys (business_id, key_hash) values ($1, $2)")
             .bind(business_id) .bind(key_hash) .execute(&self.connector).await ;
+        tracing::info!("executed an insert query for storing the new api key") ;
         match result {
             Ok(res) => {
                 tracing::info!("successfully inserted") ;
@@ -215,6 +220,7 @@ impl DbOperations {
         admin_id: i64,
         key_hash: &str,
     ) -> Result<(), sqlx::Error> {
+        tracing::info!("executing insert query for new admin api key") ;
         sqlx::query(
             "INSERT INTO admin_api_keys (admin_id, key_hash)
              VALUES ($1, $2)"
@@ -230,6 +236,7 @@ impl DbOperations {
         &self,
         key_id: i64,
     ) -> Result<(), sqlx::Error> {
+        tracing::info!("executing update query changing status to revoked for key : {}", key_id) ;
         sqlx::query(
             "UPDATE admin_api_keys
              SET status = 'revoked'
@@ -258,7 +265,7 @@ impl DbOperations {
             .bind(business_id)
             .fetch_all(&self.connector)
             .await?;
-
+        tracing::info!("executed query for getting all the accounts for the business") ;
         Ok(rows.into_iter().map(|r| Account {
             id: r.get("id"),
             name: r.get("name"),
@@ -298,7 +305,7 @@ impl DbOperations {
             .bind(account_id)
             .fetch_one(&self.connector)
             .await?;
-
+        tracing::info!("executed query for getting account balance") ;
         Ok(row.get("balance"))
     }
 
@@ -316,7 +323,7 @@ impl DbOperations {
     )       .bind(account_id)
             .fetch_one(&self.connector)
             .await?;
-
+    tracing::info!("executed query for getting account details") ;
         Ok(Account {
             id: r.get("id"),
             name: r.get("name"),
@@ -333,7 +340,7 @@ impl DbOperations {
         business_id: i64,
         new_account: NewAccount,
     ) -> Result<i64, sqlx::Error> {
-
+        
         let row = sqlx::query(
         r#"
         INSERT INTO business_accounts (business_id, name, currency)
@@ -346,7 +353,7 @@ impl DbOperations {
             .bind(new_account.currency)
             .fetch_one(&self.connector)
             .await?;
-
+        tracing::info!("executed the creation of business account sucessfully") ;
         Ok(row.get("id"))
     }
 

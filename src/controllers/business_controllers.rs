@@ -11,13 +11,19 @@ pub async fn get_business_details(State(app_state): State<Arc<AppState>>, Extens
     tracing::info!("going to get the business details based on the business_id, {}", business_account.account_id) ;
 
     match app_state.database_connector.get_business_account_by_id(business_account.account_id).await {
-        Ok(business) => (
-            StatusCode::OK,
-            Json(ApiResponse::success(business))
-        ),
-        Err(e) => (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(ApiResponse::<i64>::error(e.to_string())),
-        )
+        Ok(business) => {
+            tracing::info!("got the business details {:?}", business) ;
+            (
+                StatusCode::OK,
+                Json(ApiResponse::success(business))
+            )
+        },
+        Err(e) => {
+            tracing::error!("error was {}", e) ;
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::<BusinessState>::error(e.to_string())),
+            )
+        }
     }
 }
