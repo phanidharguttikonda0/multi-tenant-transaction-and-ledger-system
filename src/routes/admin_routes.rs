@@ -1,32 +1,18 @@
 use std::sync::Arc;
-use axum::Router;
+use axum::{middleware, Router};
 use axum::routing::{delete, get, post};
 use crate::AppState;
+use crate::controllers::admin_controllers::{create_business, generate_admin_api_keys, generate_api_keys, get_businesses, revoke_admin_api_key, revoke_api_key, rotate_api_key};
 
 pub async fn admin_routes() -> Router<Arc<AppState>> {
     Router::new()
-        .route("/businesses", post(|| async {
-            tracing::info!("Creates a new business");
-            "OK" }
+        .route("/businesses", post(create_business
         ))
-        .route("/businesses", get(|| async {
-            tracing::info!("Gets all businesses");
-            "OK"
-        }))
-        .route("/businesses/{business_id}/api-keys", post(|| async {
-            tracing::info!("generates new api keys for a business") ;
-            "OK"
-        }))
-        .route("/api-keys/{key_id}/rotate", post(|| async {
-            tracing::info!("Rotates an existing api key") ;
-        }))
-        .route("/api-keys/{key_id}", delete(|| async {
-            tracing::info!("revokes an existing api key") ;
-        }))
-        .route("/admin-api-keys", post(|| async {
-            tracing::info!("generate admin api keys") ;
-        }))
-        .route("/admin-api-keys/{key_id}", delete(|| async {
-            tracing::info!("revoke admin api keys") ;
-        }))
+        .route("/businesses", get(get_businesses))
+        .route("/businesses/{business_id}/api-keys", post(generate_api_keys))
+        .route("/api-keys/{key_id}/rotate", post(rotate_api_key))
+        .route("/api-keys/{key_id}", delete(revoke_api_key))
+        .route("/admin-api-keys", post(generate_admin_api_keys))
+        .route("/admin-api-keys/{key_id}", delete(revoke_admin_api_key))
+        .layer(middleware::from_fn(crate::middlewares::authentication_middleware::auth_check))
 }

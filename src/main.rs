@@ -11,6 +11,8 @@ use axum::Router;
 use axum::routing::get;
 use tracing_appender::non_blocking;
 use dotenv::dotenv;
+use crate::controllers::admin_controllers::create_bootstraped_admin;
+use crate::controllers::business_controllers::get_business_details;
 use crate::routes::accounts_routes::accounts_routes;
 use crate::routes::admin_routes::admin_routes;
 use crate::routes::transaction_routes::transaction_routes;
@@ -45,14 +47,8 @@ async fn top_level_routes() -> Router {
             tracing::info!("Health check") ;
             "OK"
         }))
-        .route("/get-business-account", get(|| async {
-            tracing::info!("Get business account") ;
-            "OK"
-        }))
-        .route("/_internal/bootstrap/admin", get(|| async {
-            tracing::info!("Bootstrap admin, One time execution") ;
-            "OK"
-        }))
+        .route("/get-business-account", get(get_business_details))
+        .route("/_internal/bootstrap/admin", get(create_bootstraped_admin))
         .nest("/admin", admin_routes().await)
         .nest("/accounts", accounts_routes().await)
         .nest("/transaction", transaction_routes().await)

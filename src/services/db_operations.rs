@@ -397,5 +397,28 @@ impl DbOperations {
         }
     }
 
-
+    pub async fn get_business_account_by_id(&self, account_id: i64) -> Result<BusinessState, sqlx::Error> {
+        let row = sqlx::query(
+        "
+        SELECT id, name,status::TEXT, created_at
+        FROM businesses
+        WHERE id = $1
+        " ).bind(account_id).fetch_one(&self.connector).await ;
+        
+        match row { 
+            Ok(res) => {
+                tracing::info!("got the business account") ;
+                Ok(BusinessState {
+                    id: res.get("id"),
+                    name: res.get("name"),
+                    status: res.get("status"),
+                    created_at: res.get("created_at")
+                })
+            },
+            Err(err) => {
+                tracing::error!("the error was {}", err) ;
+                Err(err)
+            }
+        }
+    }
 }

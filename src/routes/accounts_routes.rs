@@ -1,20 +1,14 @@
 use std::sync::Arc;
-use axum::Router;
+use axum::{middleware, Router};
 use axum::routing::{get, post};
 use crate::AppState;
+use crate::controllers::accounts_controllers::{create_account, get_account_balance, get_account_details, get_accounts};
 
 pub async fn accounts_routes() -> Router<Arc<AppState>> {
     Router::new()
-        .route("/", get(|| async {
-            tracing::info!("Get all accounts of a business") ;
-        }))
-        .route("/{account_id}", get(|| async {
-            tracing::info!("Get account details of the specific account") ;
-        }))
-        .route("/{account_id}/balance", get(|| async {
-            tracing::info!("Get balance of the specific account") ;
-        }))
-        .route("/", post(|| async {
-            tracing::info!("Creates a new account") ;
-        }))
+        .route("/", get(get_accounts))
+        .route("/{account_id}", get(get_account_details))
+        .route("/{account_id}/balance", get(get_account_balance))
+        .route("/", post(create_account))
+            .layer(middleware::from_fn(crate::middlewares::authentication_middleware::auth_check))
 }
