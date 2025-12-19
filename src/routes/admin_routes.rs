@@ -14,5 +14,5 @@ pub async fn admin_routes() -> Router<Arc<AppState>> {
         .route("/api-keys/{key_id}", delete(revoke_api_key))
         .route("/admin-api-keys", post(generate_admin_api_keys))
         .route("/admin-api-keys/{key_id}", delete(revoke_admin_api_key))
-        .layer(middleware::from_fn(crate::middlewares::authentication_middleware::auth_check))
+        .layer(middleware::from_fn(crate::middlewares::authentication_middleware::admin_auth_check))
 }
