@@ -404,8 +404,8 @@ impl DbOperations {
         FROM businesses
         WHERE id = $1
         " ).bind(account_id).fetch_one(&self.connector).await ;
-        
-        match row { 
+
+        match row {
             Ok(res) => {
                 tracing::info!("got the business account") ;
                 Ok(BusinessState {
@@ -421,4 +421,112 @@ impl DbOperations {
             }
         }
     }
+
+    pub async fn lock_account(
+        tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+        account_id: i64,
+    ) -> Result<(Decimal, String), sqlx::Error> {
+
+        let row = sqlx::query(
+            "SELECT balance, status::TEXT
+         FROM business_accounts
+         WHERE id = $1
+         FOR UPDATE"
+        )
+            .bind(account_id)
+            .fetch_one(&mut **tx)
+            .await?;
+
+        Ok((row.get("balance"), row.get("status")))
+    }
+
+
+    pub async fn check_idempotency(
+        tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+        business_id: i64,
+        key: &str,
+    ) -> Result<Option<i64>, sqlx::Error> {
+
+        let row = sqlx::query(
+            "SELECT id FROM transactions
+         WHERE business_id = $1 AND idempotency_key = $2"
+        )
+            .bind(business_id)
+            .bind(key)
+            .fetch_optional(&mut **tx)
+            .await?;
+
+        Ok(row.map(|r| r.get("id")))
+    }
+
+
+    pub async fn insert_transaction(
+        tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+        business_id: i64,
+        from_account: Option<i64>,
+        to_account: Option<i64>,
+        txn_type: &str,
+        amount: Decimal,
+        reference_id: Option<String>,
+        idempotency_key: &str,
+        status: &str,
+    ) -> Result<i64, sqlx::Error> {
+
+        let row = sqlx::query(
+            "INSERT INTO transactions
+         (business_id, from_account_id, to_account_id, type, amount, status, reference_id, idempotency_key)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+         RETURNING id"
+        )
+            .bind(business_id)
+            .bind(from_account)
+            .bind(to_account)
+            .bind(txn_type)
+            .bind(amount)
+            .bind(status)
+            .bind(reference_id)
+            .bind(idempotency_key)
+            .fetch_one(&mut **tx)
+            .await?;
+
+        Ok(row.get("id"))
+    }
+
+
+    pub async fn update_balance(
+        tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+        account_id: i64,
+        new_balance: Decimal,
+    ) -> Result<(), sqlx::Error> {
+
+        sqlx::query(
+            "UPDATE business_accounts
+         SET balance = $1
+         WHERE id = $2"
+        )
+            .bind(new_balance)
+            .bind(account_id)
+            .execute(&mut **tx)
+            .await?;
+
+        Ok(())
+    }
+
+    pub async fn mark_transaction_status(
+        tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+        txn_id: i64,
+        status: &str,
+    ) -> Result<(), sqlx::Error> {
+
+        sqlx::query(
+            "UPDATE transactions SET status = $1 WHERE id = $2"
+        )
+            .bind(status)
+            .bind(txn_id)
+            .execute(&mut **tx)
+            .await?;
+
+        Ok(())
+    }
+
 }
