@@ -1,10 +1,11 @@
+use chrono::{DateTime, Utc};
 use rust_decimal::Decimal;
 use sqlx::{Pool, Postgres, Row, Transaction};
 use sqlx::postgres::PgPoolOptions;
 use crate::models;
 use crate::models::accounts_models::{Account, NewAccount};
 use crate::models::bussiness_models::BusinessState;
-use crate::models::webhooks_models::WebhookResponse;
+use crate::models::webhooks_models::{WebhookEventRow, WebhookResponse, WebhookRow};
 
 pub struct DbOperations {
     pub(crate) connector: Pool<Postgres>
@@ -636,5 +637,178 @@ impl DbOperations {
 
         Ok(result.rows_affected())
     }
+
+
+
+    pub async fn create_webhook_event(
+        &self,
+        webhook_id: i64,
+        event_type: &str,
+        payload: serde_json::Value,
+    ) -> Result<i64, sqlx::Error> {
+        let row = sqlx::query(
+            r#"
+        INSERT INTO webhook_events (
+            webhook_id,
+            event_type,
+            payload,
+            status,
+            attempt_count
+        )
+        VALUES ($1, $2, $3, 'pending', 0)
+        RETURNING id
+        "#
+        )
+            .bind(webhook_id)
+            .bind(event_type)
+            .bind(payload)
+            .fetch_one(&self.connector)
+            .await?;
+
+        Ok(row.get("id"))
+    }
+
+
+    pub async fn get_webhook_event(
+        &self,
+        event_id: i64,
+    ) -> Result<Option<WebhookEventRow>, sqlx::Error> {
+        let row = sqlx::query(
+            r#"
+        SELECT
+            id,
+            webhook_id,
+            event_type,
+            payload,
+            status,
+            attempt_count,
+            next_retry_at,
+            created_at
+        FROM webhook_events
+        WHERE id = $1
+        "#
+        )
+            .bind(event_id)
+            .fetch_optional(&self.connector)
+            .await?;
+
+        Ok(row.map(|r| WebhookEventRow {
+            id: r.get("id"),
+            webhook_id: r.get("webhook_id"),
+            event_type: r.get("event_type"),
+            payload: r.get("payload"),
+            status: r.get("status"),
+            attempt_count: r.get("attempt_count"),
+            next_retry_at: r.get("next_retry_at"),
+            created_at: r.get("created_at"),
+        }))
+    }
+
+
+    pub async fn get_webhook(
+        &self,
+        webhook_id: i64,
+    ) -> Result<Option<WebhookRow>, sqlx::Error> {
+        let row = sqlx::query(
+            r#"
+        SELECT id, business_id, url, secret, status
+        FROM webhooks
+        WHERE id = $1
+          AND status = 'active'
+        "#
+        )
+            .bind(webhook_id)
+            .fetch_optional(&self.connector)
+            .await?;
+
+        Ok(row.map(|r| WebhookRow {
+            id: r.get("id"),
+            business_id: r.get("business_id"),
+            url: r.get("url"),
+            secret: r.get("secret"),
+            status: r.get("status"),
+        }))
+    }
+
+    pub async fn mark_webhook_event_delivered(
+        &self,
+        event_id: i64,
+    ) -> Result<(), sqlx::Error> {
+        sqlx::query(
+            r#"
+        UPDATE webhook_events
+        SET status = 'delivered'
+        WHERE id = $1
+        "#
+        )
+            .bind(event_id)
+            .execute(&self.connector)
+            .await?;
+
+        Ok(())
+    }
+
+
+    pub async fn schedule_webhook_retry(
+        &self,
+        event_id: i64,
+        next_retry_at: DateTime<Utc>,
+    ) -> Result<(), sqlx::Error> {
+        sqlx::query(
+            r#"
+        UPDATE webhook_events
+        SET
+            attempt_count = attempt_count + 1,
+            next_retry_at = $2
+        WHERE id = $1
+          AND status = 'pending'
+        "#
+        )
+            .bind(event_id)
+            .bind(next_retry_at)
+            .execute(&self.connector)
+            .await?;
+
+        Ok(())
+    }
+
+
+    pub async fn mark_webhook_event_failed(
+        &self,
+        event_id: i64,
+    ) -> Result<(), sqlx::Error> {
+        sqlx::query(
+            r#"
+        UPDATE webhook_events
+        SET status = 'failed'
+        WHERE id = $1
+        "#
+        )
+            .bind(event_id)
+            .execute(&self.connector)
+            .await?;
+
+        Ok(())
+    }
+
+
+    pub async fn get_pending_webhook_events(
+        &self,
+    ) -> Result<Vec<i64>, sqlx::Error> {
+        let rows = sqlx::query(
+            r#"
+        SELECT id
+        FROM webhook_events
+        WHERE status = 'pending'
+          AND (next_retry_at IS NULL OR next_retry_at <= now())
+        ORDER BY created_at
+        "#
+        )
+            .fetch_all(&self.connector)
+            .await?;
+
+        Ok(rows.into_iter().map(|r| r.get("id")).collect())
+    }
+
 
 }

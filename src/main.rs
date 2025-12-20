@@ -11,16 +11,21 @@ use axum::Router;
 use axum::routing::get;
 use tracing_appender::non_blocking;
 use dotenv::dotenv;
+use tokio::sync::mpsc::unbounded_channel;
 use crate::controllers::admin_controllers::create_bootstraped_admin;
 use crate::controllers::business_controllers::get_business_details;
+use crate::models::event_queue::WebhookQueueMessage;
 use crate::routes::accounts_routes::accounts_routes;
 use crate::routes::admin_routes::admin_routes;
 use crate::routes::transaction_routes::transaction_routes;
 use crate::routes::webhooks_routes::webhook_routes;
 use crate::services::db_operations::DbOperations;
+use crate::services::webhook_events_executor::webhook_worker;
 
 pub struct AppState {
-   pub database_connector: DbOperations
+   pub database_connector: DbOperations,
+   pub event_queue: tokio::sync::mpsc::UnboundedSender<WebhookQueueMessage>,
+    pub redis_client: redis::Client,
 }
 
 #[tokio::main]
@@ -41,7 +46,19 @@ async fn main() {
 
 async fn top_level_routes() -> Router {
     let database_connector = DbOperations::new().await ;
-    let state = Arc::new(AppState { database_connector }) ;
+    let (event_tx, event_rx) = unbounded_channel::<WebhookQueueMessage>();
+    let redis_client = redis::Client::open("redis://127.0.0.1:6379/").unwrap();
+    let state = Arc::new(AppState {
+        database_connector,
+        event_queue: event_tx,
+        redis_client,
+    }) ;
+    tracing::info!("spawning webhook worker") ;
+    tokio::spawn(webhook_worker(
+        state.clone(),
+        event_rx,
+    ));
+
     Router::new()
         .route("/health",get(|| async {
             tracing::info!("Health check") ;
