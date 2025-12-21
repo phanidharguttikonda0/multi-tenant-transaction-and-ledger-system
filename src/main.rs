@@ -50,7 +50,8 @@ async fn main() {
 async fn top_level_routes() -> Router {
     let database_connector = DbOperations::new().await ;
     let (event_tx, event_rx) = unbounded_channel::<WebhookQueueMessage>();
-    let redis_client = redis::Client::open("redis://127.0.0.1:6379/").unwrap();
+    let redis_url = std::env::var("REDIS_URL").unwrap_or("redis://127.0.0.1:6379/".to_string());
+    let redis_client = redis::Client::open(redis_url).unwrap();
     let state = Arc::new(AppState {
         database_connector,
         event_queue: event_tx,

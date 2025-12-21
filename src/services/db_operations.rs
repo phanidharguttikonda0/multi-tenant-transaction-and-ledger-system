@@ -21,6 +21,14 @@ impl DbOperations {
         let url = format!("postgres://{}:{}@{}/{}", username, password, host, db_name);
         let max_connections = std::env::var("MAX_CONNECTIONS").unwrap().parse::<u32>().unwrap();
         let pool = PgPoolOptions::new().max_connections(max_connections).connect(&url).await.unwrap() ;
+        
+        tracing::info!("Running database migrations...");
+        sqlx::migrate!("./migrations")
+            .run(&pool)
+            .await
+            .expect("Failed to run migrations");
+        tracing::info!("Database migrations complete.");
+
         DbOperations {
             connector: pool
         }

@@ -69,3 +69,6 @@ We implement an **"At-Least-Once"** delivery guarantee.
     - *Decision*: Single generic service.
     - *Trade-off*: Simpler deployment and debugging vs independent scaling of 'read' and 'write' paths.
 
+**Note**: To test if webhooks are working locally, use the demo endpoint: `http://127.0.0.1:4545/demo-webhook-listening`, such that every notification sent to the following url.
+
+### While full OpenTelemetry integration was scoped as an optional enhancement, the system currently uses structured asynchronous logging via Rust’s tracing ecosystem. Logs are emitted in a non-blocking manner using background tasks to avoid impacting request latency. The design keeps observability concerns decoupled from business logic and allows seamless future integration with OpenTelemetry exporters.

@@ -1,0 +1,40 @@
+version: '3.8'
+
+services:
+  app:
+    build: .
+    ports:
+      - "4545:4545"
+    depends_on:
+      - db
+      - redis
+    environment:
+      - PORT=4545
+      - HOST=db:5432
+      - USERNAME=postgres
+      - PASSWORD=postgres
+      - DB_NAME=ledger
+      - MAX_CONNECTIONS=10
+      - REDIS_URL=redis://redis:6379/
+      - RUST_LOG=info
+
+  db:
+    image: postgres:15-alpine
+    restart: always
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=ledger
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7-alpine
+    restart: always
+    ports:
+      - "6379:6379"
+
+volumes:
+  postgres_data:
