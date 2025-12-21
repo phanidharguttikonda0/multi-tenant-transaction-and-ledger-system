@@ -11,6 +11,83 @@ There are two types of keys:
 1.  **Admin API Keys**: For managing businesses (Admin routes).
 2.  **Business API Keys**: For managing accounts and transactions (Business routes).
 
+## Getting Started Workflow
+
+Follow this linear sequence to set up the system and perform transactions.
+
+### 1. System Bootstrap
+**Goal**: Initialize the system and create the first admin account.
+- **API**: `GET /_internal/bootstrap/admin`
+- **Action**: Call this endpoint to create the default admin user.
+- **Response**: Returns the `admin_id` (e.g., `1`).
+
+### 2. Get Admin Access
+**Goal**: Generate an API key for the admin to perform administrative tasks.
+- **API**: `POST /admin/admin-api-keys`
+- **Body**: `1` (Raw Integer: The Admin ID from Step 1)
+- **Response**: Returns a `data` string containing the raw API key (e.g., `admin_sk_...`).
+- **Important**: Save this key immediately. You will not be able to see it again.
+- **Auth**: This step does not require an auth header (bootstrapping phase).
+
+### 3. Create Business
+**Goal**: Create a tenant (business) in the system.
+- **API**: `POST /admin/businesses`
+- **Auth**: `Authorization: Bearer <ADMIN_KEY>`
+- **Body**:
+  ```json
+  {
+    "name": "My Business"
+  }
+  ```
+- **Response**: Returns `data` as the `business_id` (e.g., `12`).
+
+### 4. Get Business Access
+**Goal**: Generate an API key for the business to perform operations.
+- **API**: `POST /admin/businesses/api-keys`
+- **Auth**: `Authorization: Bearer <ADMIN_KEY>`
+- **Body**: `12` (Raw Integer: The Business ID)
+- **Response**: Returns `data` containing the `raw_key` (e.g., `biz_sk_...`).
+- **Important**: Save this key. It is required for all business operations involved in the steps below.
+
+### 5. Create & Manage Accounts
+**Goal**: Create financial accounts (ledgers) for the business.
+- **API**: `POST /accounts`
+- **Auth**: `Authorization: Bearer <BUSINESS_KEY>`
+- **Body**:
+  ```json
+  {
+    "name": "General Wallet",
+    "currency": "USD"
+  }
+  ```
+- **Response**: Returns `account_id` (e.g., `101`).
+
+### 6. Perform Transactions
+**Goal**: Move money between accounts.
+- **API**: `POST /transaction/credit` (or `debit`/`transfer`)
+- **Auth**: `Authorization: Bearer <BUSINESS_KEY>`
+- **Body**:
+  ```json
+  {
+    "to_account_id": 101,
+    "amount": "100.00",
+    "idempotency_key": "unique-uuid-v4",
+    "reference_id": "ref-001"
+  }
+  ```
+
+### 7. Register Webhooks
+**Goal**: Receive real-time notifications for payment receipts.
+- **API**: `POST /webhooks`
+- **Auth**: `Authorization: Bearer <BUSINESS_KEY>`
+- **Body**:
+  ```json
+  {
+    "url": "http://127.0.0.1:4545/demo-webhook-listening" 
+  }
+  ```
+  *(Note: You can use the demo URL above to test locally, or your own server URL)*
+
 ## 1. System & Bootstrap
 
 ### Health Check
