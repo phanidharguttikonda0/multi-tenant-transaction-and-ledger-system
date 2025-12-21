@@ -41,17 +41,8 @@ pub async fn webhook_worker(
         }
         tracing::info!("getting webhook config") ;
         // Loading webhook config
-        let webhook = match app_state
-            .database_connector
-            .get_webhook(event.webhook_id)
-            .await
-        {
-            Ok(Some(w)) => w,
-            _ => {
-                error!("webhook config missing for event {}", event_id);
-                continue;
-            }
-        };
+        let webhook: WebhookRow = app_state.database_connector.get_full_webhook(event.webhook_id).await.unwrap() ;
+
 
         // Sending HTTP webhook
         let send_result = send_webhook_http(&webhook, &event).await;
@@ -65,7 +56,7 @@ pub async fn webhook_worker(
                     .await;
 
                 info!("webhook_event {} delivered", event_id);
-            }
+            },
 
             Err(err) => {
                 warn!(
@@ -149,6 +140,7 @@ fn compute_next_retry(attempts: i32) -> Option<DateTime<Utc>> {
 
 
 use redis::AsyncCommands;
+use sqlx::Error;
 use crate::models::webhooks_models::{WebhookEventRow, WebhookRow};
 
 async fn schedule_redis_retry(
@@ -176,8 +168,10 @@ pub async fn enqueue_pending_webhooks(app_state: Arc<AppState>) {
         .unwrap_or_default();
 
     for event_id in events {
+        let webhook = app_state.database_connector.get_webhook_event(event_id).await.unwrap().unwrap();
         let _ = app_state.event_queue.send(WebhookQueueMessage {
             webhook_event_id: event_id,
+            webhook_id: webhook.webhook_id
         });
     }
 }
@@ -222,9 +216,11 @@ pub async fn redis_expiry_subscriber(app_state: Arc<AppState>) {
 
             // Push event_id back into an unbounded channel
             tracing::info!("adding event_id back to the unbounded channel") ;
+            let webhook = app_state.database_connector.get_webhook_event(event_id).await.unwrap().unwrap();
             let _ = app_state.event_queue.send(
                 WebhookQueueMessage {
                     webhook_event_id: event_id,
+                    webhook_id: webhook.webhook_id
                 }
             );
         }

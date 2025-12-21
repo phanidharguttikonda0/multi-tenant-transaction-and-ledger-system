@@ -85,5 +85,6 @@ async fn top_level_routes() -> Router {
         .with_state(state)
         .route("/demo-webhook-listening", post(
             demo_listening_webhook
-        ))
+        )) // it is used for listening to the messages sent by the webhooks. just a demo type to listen to make
+    // sure everything working perfectly fine.
 }

@@ -639,7 +639,26 @@ impl DbOperations {
         Ok(result.rows_affected())
     }
 
-
+    pub async fn get_webhook(&self, business_id: i64) -> Result<i64, sqlx::Error> {
+        let row = sqlx::query("select id from webhooks where business_id = $1 AND status = 'active' ")
+            .bind(business_id)
+            .fetch_one(&self.connector).await? ;
+        Ok(row.get("id"))
+    }
+    
+    // get_full_webhook
+    pub async fn get_full_webhook(&self, id: i64) -> Result<WebhookRow, sqlx::Error> {
+        let row = sqlx::query("select id, business_id, url, status::Text, secret from webhooks where id=$1 ")
+            .bind(id)
+            .fetch_one(&self.connector).await? ;
+        Ok(WebhookRow {
+            id: row.get("id"),
+            business_id: row.get("business_id"),
+            status: row.get("status"),
+            url: row.get("url"),
+            secret: row.get("secret")
+        })
+    }
 
     pub async fn create_webhook_event(
         &self,
@@ -681,7 +700,7 @@ impl DbOperations {
             webhook_id,
             event_type,
             payload,
-            status,
+            status::Text,
             attempt_count,
             next_retry_at,
             created_at
@@ -702,32 +721,6 @@ impl DbOperations {
             attempt_count: r.get("attempt_count"),
             next_retry_at: r.get("next_retry_at"),
             created_at: r.get("created_at"),
-        }))
-    }
-
-
-    pub async fn get_webhook(
-        &self,
-        webhook_id: i64,
-    ) -> Result<Option<WebhookRow>, sqlx::Error> {
-        let row = sqlx::query(
-            r#"
-        SELECT id, business_id, url, secret, status
-        FROM webhooks
-        WHERE id = $1
-          AND status = 'active'
-        "#
-        )
-            .bind(webhook_id)
-            .fetch_optional(&self.connector)
-            .await?;
-
-        Ok(row.map(|r| WebhookRow {
-            id: r.get("id"),
-            business_id: r.get("business_id"),
-            url: r.get("url"),
-            secret: r.get("secret"),
-            status: r.get("status"),
         }))
     }
 
