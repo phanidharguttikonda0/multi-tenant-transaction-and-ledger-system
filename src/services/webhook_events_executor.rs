@@ -1,6 +1,6 @@
 use std::sync::Arc;
 use tokio::sync::mpsc::UnboundedReceiver;
-use tracing::{error, info};
+use tracing::{error, info, warn};
 use crate::AppState;
 use crate::models::event_queue::WebhookQueueMessage;
 
@@ -34,9 +34,11 @@ pub async fn webhook_worker(
 
         // Skipping the terminal states
         if event.status == "delivered" || event.status == "failed" {
+            tracing::warn!("which are already sent and which are already exhausted failed, so we don't need to send them again") ;
+            tracing::info!("ignoring those tasks") ;
             continue;
         }
-
+        tracing::info!("getting webhook config") ;
         // Loading webhook config
         let webhook = match app_state
             .database_connector
@@ -65,7 +67,7 @@ pub async fn webhook_worker(
             }
 
             Err(err) => {
-                error!(
+                warn!(
                     "webhook_event {} failed attempt {}: {}",
                     event_id, event.attempt_count, err
                 );
@@ -74,6 +76,9 @@ pub async fn webhook_worker(
                 let next = compute_next_retry(event.attempt_count);
 
                 if let Some(next_retry_at) = next {
+                    tracing::warn!("a retry failed still there are some retries") ;
+
+                    tracing::info!("updating db with next retry timestamp") ;
                     // Updating DB
                     let _ = app_state
                         .database_connector
@@ -83,7 +88,8 @@ pub async fn webhook_worker(
                         )
                         .await;
 
-                    // Scheduling Redis TTL
+                    tracing::info!("adding the key to redis with next TTL") ;
+                    // Scheduling Redis TTL(Total Time to Live)
                     let _ = schedule_redis_retry(
                         &app_state.redis_client,
                         event_id,
@@ -91,7 +97,8 @@ pub async fn webhook_worker(
                     )
                         .await;
                 } else {
-                    // Exhausted all 3 retries
+                    // Exhausted all retry logic
+                    tracing::warn!("exhausted all retry logic of the webhook") ;
                     let _ = app_state
                         .database_connector
                         .mark_webhook_event_failed(event_id)
@@ -121,6 +128,8 @@ async fn send_webhook_http(
     if res.status().is_success() {
         Ok(())
     } else {
+        tracing::warn!("http {} {}", res.status(), res.text().await.unwrap_or_default());
+        tracing::warn!("webhook failed with status, so we need to send an notification to the user, via mail or anything else") ;
         Err(format!("http {}", res.status()))
     }
 }
@@ -171,3 +180,63 @@ pub async fn enqueue_pending_webhooks(app_state: Arc<AppState>) {
         });
     }
 }
+
+
+pub async fn redis_expiry_subscriber(app_state: Arc<AppState>) {
+    info!("Starting Redis expiry subscriber");
+
+    let client = app_state.redis_client.clone();
+    let mut pubsub = match client.get_async_pubsub().await {
+        Ok(c) => c,
+        Err(e) => {
+            error!("Failed to connect to Redis: {}", e);
+            return;
+        }
+    };
+
+    // Listen to key expiry events
+    if let Err(e) = pubsub.subscribe("__keyevent@0__:expired").await
+    {
+        error!("Failed to subscribe to Redis expiry events: {}", e);
+        return;
+    }
+
+    info!("Subscribed to Redis key expiry events");
+
+    while let Ok(msg) = pubsub.on_message().await {
+        let expired_key: String = match msg.get_payload() {
+            Ok(v) => v,
+            Err(_) => continue,
+        };
+
+        tracing::info!("got an expired event key: {}", expired_key);
+        // We only care about webhook retry keys, remaining keys not needed here
+        if let Some(event_id) = parse_webhook_retry_key(&expired_key) {
+            info!(
+                "Redis TTL expired for webhook_event_id={}",
+                event_id
+            );
+
+            // Push event_id back into an unbounded channel
+            tracing::info!("adding event_id back to the unbounded channel") ;
+            let _ = app_state.event_queue.send(
+                WebhookQueueMessage {
+                    webhook_event_id: event_id,
+                }
+            );
+        }
+    }
+}
+
+fn parse_webhook_retry_key(key: &str) -> Option<i64> {
+    // Expected format: webhook:retry:{event_id}
+    tracing::info!("extracting the event_id from the key: {}", key) ;
+    let prefix = "webhook:retry:";
+
+    if key.starts_with(prefix) {
+        key[prefix.len()..].parse::<i64>().ok()
+    } else {
+        None
+    }
+}
+

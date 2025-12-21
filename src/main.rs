@@ -9,6 +9,7 @@ mod controllers;
 use std::sync::Arc;
 use axum::Router;
 use axum::routing::get;
+use std::time::Duration;
 use tracing_appender::non_blocking;
 use dotenv::dotenv;
 use tokio::sync::mpsc::unbounded_channel;
@@ -20,7 +21,7 @@ use crate::routes::admin_routes::admin_routes;
 use crate::routes::transaction_routes::transaction_routes;
 use crate::routes::webhooks_routes::webhook_routes;
 use crate::services::db_operations::DbOperations;
-use crate::services::webhook_events_executor::webhook_worker;
+use crate::services::webhook_events_executor::{redis_expiry_subscriber, webhook_worker};
 
 pub struct AppState {
    pub database_connector: DbOperations,
@@ -58,6 +59,18 @@ async fn top_level_routes() -> Router {
         state.clone(),
         event_rx,
     ));
+
+    tracing::info!("spawning redis expiry subscriber events listener") ;
+    let state_ = state.clone() ;
+    tokio::spawn(async move {
+        loop {
+            if let Err(e) = redis_expiry_subscriber(state_.clone()).await {
+                tracing::error!("Redis expiry listener failed: {:?}", e);
+            }
+            tracing::warn!("Restarting listener in 2 seconds...");
+            tokio::time::sleep(Duration::from_secs(2)).await;
+        }
+    });
 
     Router::new()
         .route("/health",get(|| async {
