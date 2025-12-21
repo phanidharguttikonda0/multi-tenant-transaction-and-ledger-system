@@ -33,6 +33,9 @@ services:
   redis:
     image: redis:7-alpine
     restart: always
+    command: >
+      redis-server
+      --notify-keyspace-events Ex
     ports:
       - "6379:6379"
 

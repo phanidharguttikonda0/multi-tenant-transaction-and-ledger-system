@@ -12,6 +12,7 @@ use axum::routing::{get, post};
 use std::time::Duration;
 use tracing_appender::non_blocking;
 use dotenv::dotenv;
+use sqlx::migrate::Migrator;
 use tokio::sync::mpsc::unbounded_channel;
 use crate::controllers::admin_controllers::create_bootstraped_admin;
 use crate::controllers::business_controllers::get_business_details;
@@ -30,7 +31,7 @@ pub struct AppState {
    pub event_queue: tokio::sync::mpsc::UnboundedSender<WebhookQueueMessage>,
     pub redis_client: redis::Client,
 }
-
+static MIGRATOR: Migrator = sqlx::migrate!("./migrations");
 #[tokio::main]
 async fn main() {
     let (non_blocking, _guard) = non_blocking(std::io::stdout());
@@ -49,6 +50,9 @@ async fn main() {
 
 async fn top_level_routes() -> Router {
     let database_connector = DbOperations::new().await ;
+    let is_local = std::env::var("is_local").unwrap_or("false".to_string()) ;
+        tracing::info!("running migrations") ;
+        MIGRATOR.run(&database_connector.connector).await.expect("migration error") ;
     let (event_tx, event_rx) = unbounded_channel::<WebhookQueueMessage>();
     let redis_url = std::env::var("REDIS_URL").unwrap_or("redis://127.0.0.1:6379/".to_string());
     let redis_client = redis::Client::open(redis_url).unwrap();
