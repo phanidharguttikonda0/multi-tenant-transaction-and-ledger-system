@@ -23,6 +23,7 @@ use crate::routes::webhooks_routes::webhook_routes;
 use crate::services::db_operations::DbOperations;
 use crate::services::other_services::demo_listening_webhook;
 use crate::services::webhook_events_executor::{redis_expiry_subscriber, webhook_worker};
+use crate::middlewares::rate_limit_middleware::rate_limit_middleware;
 
 pub struct AppState {
    pub database_connector: DbOperations,
@@ -42,7 +43,7 @@ async fn main() {
     let tcp_listener = tokio::net::TcpListener::bind(format!("0.0.0.0:{}", port)).await.unwrap();
 
     tracing::info!("Server started") ;
-    axum::serve(tcp_listener, top_level_routes().await).await.unwrap() ;
+    axum::serve(tcp_listener, top_level_routes().await.into_make_service_with_connect_info::<std::net::SocketAddr>()).await.unwrap() ;
 }
 
 
@@ -82,9 +83,10 @@ async fn top_level_routes() -> Router {
         .nest("/accounts", accounts_routes(state.clone()).await)
         .nest("/transaction", transaction_routes(state.clone()).await)
         .nest("/webhooks", webhook_routes(state.clone()).await)
-        .with_state(state)
+        .with_state(state.clone())
         .route("/demo-webhook-listening", post(
             demo_listening_webhook
         )) // it is used for listening to the messages sent by the webhooks. just a demo type to listen to make
     // sure everything working perfectly fine.
+        .layer(middleware::from_fn_with_state(state.clone(), rate_limit_middleware))
 }
