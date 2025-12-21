@@ -1,7 +1,15 @@
 # Build Stage
-FROM rust:1.83-slim-bookworm AS builder
+FROM rust:1.91-slim-bookworm AS builder
+
 
 WORKDIR /app
+
+# 🔥 Install build dependencies (IMPORTANT)
+RUN apt-get update && apt-get install -y \
+    pkg-config \
+    libssl-dev \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
 
 # Copy dependency files
 COPY Cargo.toml Cargo.lock ./
