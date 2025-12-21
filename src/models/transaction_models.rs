@@ -2,13 +2,6 @@ use serde::{Deserialize, Serialize};
 use rust_decimal::Decimal;
 use chrono::{DateTime, Utc};
 
-#[derive(Debug, Serialize, Deserialize)]
-#[serde(rename_all = "lowercase")]
-pub enum TransactionType {
-    Credit,
-    Debit,
-    Transfer,
-}
 
 #[derive(Debug, Serialize)]
 pub struct Transaction {
@@ -48,4 +41,21 @@ pub struct TransferRequest {
     pub amount: Decimal,
     pub reference_id: Option<String>,
     pub idempotency_key: String,
+}
+
+
+#[derive(Debug, Clone, Copy, sqlx::Type, PartialEq, Eq)]
+#[sqlx(type_name = "transaction_status_enum", rename_all = "snake_case")]
+pub enum TransactionStatus {
+    Pending,
+    Succeeded,
+    Failed,
+}
+
+#[derive(Debug, Clone, Copy, sqlx::Type, PartialEq, Eq)]
+#[sqlx(type_name = "transaction_type_enum", rename_all = "snake_case")]
+pub enum TransactionType {
+    Credit,
+    Debit,
+    Transfer,
 }

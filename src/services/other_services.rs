@@ -1,3 +1,4 @@
+use axum::Json;
 use rand::{distributions::Alphanumeric, Rng};
 use hmac::{Hmac, Mac};
 use sha2::Sha256;
@@ -47,4 +48,10 @@ pub fn hash_api_key(raw_key: &str) -> String {
     mac.update(raw_key.as_bytes());
 
     hex::encode(mac.finalize().into_bytes())
+}
+
+
+pub async fn demo_listening_webhook(Json(value): Json<serde_json::Value>) -> impl axum::response::IntoResponse {
+    tracing::info!("demo_listening_webhook {:?}", value);
+    "Ok"
 }

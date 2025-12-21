@@ -5,7 +5,7 @@ use axum::response::IntoResponse;
 use sqlx::Row;
 use crate::AppState;
 use crate::models::common::{AccountId, ApiResponse};
-use crate::models::transaction_models::{CreditRequest, DebitRequest, Transaction, TransferRequest};
+use crate::models::transaction_models::{CreditRequest, DebitRequest, Transaction, TransactionStatus, TransactionType, TransferRequest};
 use crate::services::db_operations::DbOperations;
 
 pub async fn credit_money(
@@ -61,11 +61,11 @@ pub async fn credit_money(
         account.account_id,
         None,
         Some(req.to_account_id),
-        "credit",
+        TransactionType::Credit,
         req.amount,
         req.reference_id,
         &req.idempotency_key,
-        "pending",
+        TransactionStatus::Pending,
     )
         .await
         .unwrap();
@@ -74,7 +74,7 @@ pub async fn credit_money(
         .await
         .unwrap();
 
-    DbOperations::mark_transaction_status(&mut tx, txn_id, "succeeded")
+    DbOperations::mark_transaction_status(&mut tx, txn_id, TransactionStatus::Succeeded)
         .await
         .unwrap();
 
@@ -104,7 +104,7 @@ pub async fn debit_money(
         tx.rollback().await.ok();
         return (
             axum::http::StatusCode::OK,
-            Json(ApiResponse::success(txn_id)),
+            Json(ApiResponse::<i64>::error("Balance is zero".to_string())),
         );
     }
 
@@ -126,11 +126,11 @@ pub async fn debit_money(
         account.account_id,
         Some(req.from_account_id),
         None,
-        "debit",
+        TransactionType::Debit,
         req.amount,
         req.reference_id,
         &req.idempotency_key,
-        "pending",
+        TransactionStatus::Pending,
     )
         .await
         .unwrap();
@@ -138,8 +138,8 @@ pub async fn debit_money(
     DbOperations::update_balance(&mut tx, req.from_account_id, balance - req.amount)
         .await
         .unwrap();
-
-    DbOperations::mark_transaction_status(&mut tx, txn_id, "succeeded")
+    
+    DbOperations::mark_transaction_status(&mut tx, txn_id, TransactionStatus::Succeeded)
         .await
         .unwrap();
 
@@ -191,11 +191,11 @@ pub async fn transfer_money(
         account.account_id,
         Some(req.from_account_id),
         Some(req.to_account_id),
-        "transfer",
+        TransactionType::Transfer,
         req.amount,
         req.reference_id,
         &req.idempotency_key,
-        "pending",
+        TransactionStatus::Pending,
     )
         .await
         .unwrap();
@@ -207,7 +207,7 @@ pub async fn transfer_money(
         .await
         .unwrap();
 
-    DbOperations::mark_transaction_status(&mut tx, txn_id, "succeeded")
+    DbOperations::mark_transaction_status(&mut tx, txn_id, TransactionStatus::Succeeded)
         .await
         .unwrap();
 

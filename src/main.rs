@@ -7,8 +7,8 @@ mod services;
 mod controllers;
 
 use std::sync::Arc;
-use axum::Router;
-use axum::routing::get;
+use axum::{middleware, Router};
+use axum::routing::{get, post};
 use std::time::Duration;
 use tracing_appender::non_blocking;
 use dotenv::dotenv;
@@ -21,6 +21,7 @@ use crate::routes::admin_routes::admin_routes;
 use crate::routes::transaction_routes::transaction_routes;
 use crate::routes::webhooks_routes::webhook_routes;
 use crate::services::db_operations::DbOperations;
+use crate::services::other_services::demo_listening_webhook;
 use crate::services::webhook_events_executor::{redis_expiry_subscriber, webhook_worker};
 
 pub struct AppState {
@@ -75,11 +76,14 @@ async fn top_level_routes() -> Router {
             tracing::info!("Health check") ;
             "OK"
         }))
-        .route("/get-business-account", get(get_business_details))
+        .route("/get-business-account", get(get_business_details).layer(middleware::from_fn_with_state(state.clone(), crate::middlewares::authentication_middleware::auth_check)))
         .route("/_internal/bootstrap/admin", get(create_bootstraped_admin))
-        .nest("/admin", admin_routes().await)
-        .nest("/accounts", accounts_routes().await)
-        .nest("/transaction", transaction_routes().await)
-        .nest("/webhooks", webhook_routes().await)
+        .nest("/admin", admin_routes(state.clone()).await)
+        .nest("/accounts", accounts_routes(state.clone()).await)
+        .nest("/transaction", transaction_routes(state.clone()).await)
+        .nest("/webhooks", webhook_routes(state.clone()).await)
         .with_state(state)
+        .route("/demo-webhook-listening", post(
+            demo_listening_webhook
+        ))
 }

@@ -5,6 +5,7 @@ use sqlx::postgres::PgPoolOptions;
 use crate::models;
 use crate::models::accounts_models::{Account, NewAccount};
 use crate::models::bussiness_models::BusinessState;
+use crate::models::transaction_models::{TransactionStatus, TransactionType};
 use crate::models::webhooks_models::{WebhookEventRow, WebhookResponse, WebhookRow};
 
 pub struct DbOperations {
@@ -364,7 +365,7 @@ impl DbOperations {
         &self,
         key_hash: &str,
     ) -> Result<i64, sqlx::Error> {
-
+        tracing::info!("the key hash was {}", key_hash) ;
         let rec = sqlx::query(
         r#"
         SELECT business_id
@@ -475,11 +476,11 @@ impl DbOperations {
         business_id: i64,
         from_account: Option<i64>,
         to_account: Option<i64>,
-        txn_type: &str,
+        txn_type: TransactionType,
         amount: Decimal,
         reference_id: Option<String>,
         idempotency_key: &str,
-        status: &str,
+        status: TransactionStatus,
     ) -> Result<i64, sqlx::Error> {
 
         let row = sqlx::query(
@@ -525,7 +526,7 @@ impl DbOperations {
     pub async fn mark_transaction_status(
         tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
         txn_id: i64,
-        status: &str,
+        status: TransactionStatus,
     ) -> Result<(), sqlx::Error> {
 
         sqlx::query(

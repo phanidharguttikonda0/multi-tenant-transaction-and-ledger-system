@@ -1,4 +1,4 @@
-use axum::extract::Request;
+use axum::extract::{Request, State};
 use axum::middleware::Next;
 use axum::response::{IntoResponse, Response};
 
@@ -7,27 +7,29 @@ use crate::AppState;
 
 
 pub async fn auth_check(
+    State(state): State<Arc<AppState>>,
     mut req: Request,
     next: Next,
 ) -> Response {
 
-    let state = req
-        .extensions()
-        .get::<Arc<AppState>>()
-        .cloned()
-        .expect("AppState missing");
+    // let state = req
+    //     .extensions()
+    //     .get::<Arc<AppState>>()
+    //     .cloned()
+    //     .expect("AppState missing");
 
     let headers = req.headers();
-
+    tracing::info!("received headers") ;
     let raw_key = match extract_bearer_token(headers) {
         Some(k) => k,
         None => {
             return StatusCode::UNAUTHORIZED.into_response();
         }
     };
+    tracing::info!("Extracted bearer token") ;
 
     let key_hash = hash_api_key(&raw_key);
-
+    tracing::info!("the key hash is {}", key_hash);
     match state
         .database_connector
         .verify_business_api_key(&key_hash)
@@ -43,22 +45,16 @@ pub async fn auth_check(
 
 
 pub async fn admin_auth_check(
+    State(state): State<Arc<AppState>>,
     mut req: Request,
     next: Next,
-) -> Response {
-
-    let state = req
-        .extensions()
-        .get::<Arc<AppState>>()
-        .cloned()
-        .expect("AppState missing");
-
+) -> Result<Response, Response> {
     let headers = req.headers();
 
     let raw_key = match extract_bearer_token(headers) {
         Some(k) => k,
         None => {
-            return StatusCode::UNAUTHORIZED.into_response();
+            return Err(StatusCode::UNAUTHORIZED.into_response());
         }
     };
 
@@ -70,10 +66,13 @@ pub async fn admin_auth_check(
         .await
     {
         Ok(admin_id) => {
-            req.extensions_mut().insert(AccountId { account_id: admin_id });
-            next.run(req).await
+            req.extensions_mut().insert(AccountId {
+                account_id: admin_id,
+            });
+
+            Ok(next.run(req).await)
         }
-        Err(_) => StatusCode::UNAUTHORIZED.into_response(),
+        Err(_) => Err(StatusCode::UNAUTHORIZED.into_response()),
     }
 }
 use axum::http::{HeaderMap, StatusCode};
