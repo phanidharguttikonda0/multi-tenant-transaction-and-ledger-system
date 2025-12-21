@@ -3,6 +3,7 @@ use tokio::sync::mpsc::UnboundedReceiver;
 use tracing::{error, info, warn};
 use crate::AppState;
 use crate::models::event_queue::WebhookQueueMessage;
+use futures_util::StreamExt;
 
 pub async fn webhook_worker(
     app_state: Arc<AppState>,
@@ -128,7 +129,7 @@ async fn send_webhook_http(
     if res.status().is_success() {
         Ok(())
     } else {
-        tracing::warn!("http {} {}", res.status(), res.text().await.unwrap_or_default());
+        tracing::warn!("status was {}", res.status()) ;
         tracing::warn!("webhook failed with status, so we need to send an notification to the user, via mail or anything else") ;
         Err(format!("http {}", res.status()))
     }
@@ -155,13 +156,13 @@ async fn schedule_redis_retry(
     event_id: i64,
     retry_at: chrono::DateTime<chrono::Utc>,
 ) -> redis::RedisResult<()> {
-    let mut conn = redis_client.get_async_connection().await?;
+    let mut conn = redis_client.get_multiplexed_async_connection().await?;
 
     let ttl = (retry_at - chrono::Utc::now()).num_seconds().max(1);
 
     let key = format!("webhook:retry:{}", event_id);
 
-    conn.set_ex(key, "", ttl as usize).await?;
+    let _: () =conn.set_ex(key, "", ttl as u64).await?;
 
     Ok(())
 }
@@ -203,7 +204,9 @@ pub async fn redis_expiry_subscriber(app_state: Arc<AppState>) {
 
     info!("Subscribed to Redis key expiry events");
 
-    while let Ok(msg) = pubsub.on_message().await {
+    let mut stream = pubsub.on_message();
+
+    while let Some(msg) = stream.next().await {
         let expired_key: String = match msg.get_payload() {
             Ok(v) => v,
             Err(_) => continue,

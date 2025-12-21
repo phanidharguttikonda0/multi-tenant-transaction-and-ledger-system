@@ -64,9 +64,7 @@ async fn top_level_routes() -> Router {
     let state_ = state.clone() ;
     tokio::spawn(async move {
         loop {
-            if let Err(e) = redis_expiry_subscriber(state_.clone()).await {
-                tracing::error!("Redis expiry listener failed: {:?}", e);
-            }
+            redis_expiry_subscriber(state_.clone()).await ;
             tracing::warn!("Restarting listener in 2 seconds...");
             tokio::time::sleep(Duration::from_secs(2)).await;
         }
